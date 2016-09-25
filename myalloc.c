@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <assert.h>
 #include <sys/mman.h>
 #include "myalloc.h"
@@ -10,8 +11,13 @@
 
 typedef struct {
 	size_t block_size;
-	char block_used;
+	bool block_used;
+	bool previous_used;
 } block_header;
+
+typedef struct {
+	size_t block_size;
+} block_footer;
 
 /*** FUNCTION PROTOTYPES ***/
 
@@ -21,16 +27,19 @@ void *find_free_block(size_t size);
 void allocate_block(void *block_ptr, size_t size);
 void free_block(void *block_ptr);
 
-void write_free_block(void *ptr, size_t size);
-void write_used_block(void *ptr, size_t size);
+void write_free_block(void *ptr, size_t size, bool previous_used);
+void write_used_block(void *ptr, size_t size, bool previous_used);
+void set_previous_used(void *block_ptr, bool value);
 
 void *get_content_pointer(void *block_ptr);
 void *get_block_pointer(void *content_ptr);
 size_t get_content_size(void *block_ptr);
-char is_block_used(void *block_ptr);
-void *get_next_block(void *block_ptr);
-
 size_t get_block_size(void *block_ptr);
+bool is_block_used(void *block_ptr);
+bool is_previous_used(void* block_ptr);
+bool is_next_used(void *block_ptr);
+void *get_previous_block(void *block_ptr);
+void *get_next_block(void *block_ptr);
 
 /*** GLOBAL VARIABLES ***/
 
@@ -78,7 +87,7 @@ void *initialize_memory() {
 		return NULL;
 	}
 
-	write_free_block(ptr, INITIAL_SIZE);
+	write_free_block(ptr, INITIAL_SIZE, true);
 
 	return ptr;
 }
@@ -115,11 +124,23 @@ void allocate_block(void *block_ptr, size_t used_content_size) {
 	size_t original_content_size = get_content_size(block_ptr);
 
 	size_t used_block_size = used_content_size + sizeof(block_header);
-	write_used_block(block_ptr, used_block_size);
+	write_used_block(block_ptr, used_block_size, is_previous_used(block_ptr));
 
 	if (original_content_size > used_content_size) {
+		// if the used block is bigger than needed, split it into a used
+		// and a free block
+
+		void *free_block_ptr = block_ptr + used_block_size;
 		size_t free_block_size = original_block_size - used_block_size;
-		write_free_block(block_ptr + used_block_size, free_block_size);
+		write_free_block(free_block_ptr, free_block_size, true);
+
+		// updating the next block's previous_used is not neccessary, because
+		// it's already set to false (next block's previous block is the block
+		// we're allocating, which was free)
+	} else {
+		// we need to update next block's previous_used to true
+		void *next_block = get_next_block(block_ptr);
+		set_previous_used(next_block, true);
 	}
 }
 
@@ -127,23 +148,59 @@ void allocate_block(void *block_ptr, size_t used_content_size) {
 
 void free_block(void *content_ptr) {
 	void *block_ptr = get_block_pointer(content_ptr);
-	size_t size = get_block_size(block_ptr);
-	write_free_block(block_ptr, size);
+
+	assert(is_block_used(block_ptr));
+
+	bool previous_used = is_previous_used(block_ptr);
+	bool next_used = is_next_used(block_ptr);
+
+	void *new_block_ptr = block_ptr;
+	size_t new_block_size = get_block_size(block_ptr);
+	bool new_previous_used = previous_used;
+
+	if (!previous_used) {
+		void *previous_block = get_previous_block(block_ptr);
+
+		new_block_ptr = previous_block;
+		new_block_size += get_block_size(previous_block);
+		new_previous_used = is_previous_used(previous_block);
+	}
+
+	if (!next_used) {
+		void *next_block = get_next_block(block_ptr);
+		new_block_size += get_block_size(next_block);
+	}
+
+	write_free_block(new_block_ptr, new_block_size, new_previous_used);
+
+	void *next_block = get_next_block(new_block_ptr);
+	set_previous_used(next_block, false);
+
 	// printf("freed block %p size %d\n", block_ptr, size);
 }
 
 /*** BLOCK HELPER FUNCTIONS ***/
 
-void write_free_block(void *ptr, size_t size) {
+void write_free_block(void *ptr, size_t size, bool previous_used) {
 	block_header *header_ptr = ptr;
 	header_ptr->block_size = size;
-	header_ptr->block_used = 0;
+	header_ptr->block_used = false;
+	header_ptr->previous_used = previous_used;
+
+	block_footer *footer_ptr = ptr + (size - sizeof(block_footer));
+	footer_ptr->block_size = size;
 }
 
-void write_used_block(void *ptr, size_t size) {
+void write_used_block(void *ptr, size_t size, bool previous_used) {
 	block_header *header_ptr = ptr;
 	header_ptr->block_size = size;
-	header_ptr->block_used = 1;
+	header_ptr->block_used = true;
+	header_ptr->previous_used = previous_used;
+}
+
+void set_previous_used(void *block_ptr, bool value) {
+	block_header *header_ptr = block_ptr;
+	header_ptr->previous_used = value;
 }
 
 void *get_content_pointer(void *block_ptr) {
@@ -163,11 +220,29 @@ size_t get_content_size(void *block_ptr) {
 	return get_block_size(block_ptr) - sizeof(block_header);
 }
 
-char is_block_used(void *block_ptr) {
+bool is_block_used(void *block_ptr) {
 	block_header *header_ptr = block_ptr;
 	return header_ptr->block_used;
 }
 
+bool is_previous_used(void *block_ptr) {
+	block_header *header_ptr = block_ptr;
+	return header_ptr->previous_used;
+}
+
+bool is_next_used(void *block_ptr) {
+	// TODO: fix accessing outside of allocated VM
+	void *next_block_ptr = get_next_block(block_ptr);
+	return is_block_used(next_block_ptr);
+}
+
 void *get_next_block(void *block_ptr) {
 	return block_ptr + get_block_size(block_ptr);
+}
+
+void *get_previous_block(void *block_ptr) {
+	assert(!is_previous_used(block_ptr));
+
+	block_footer *footer_ptr = block_ptr - sizeof(block_footer);
+	return block_ptr - footer_ptr->block_size;
 }
