@@ -20,14 +20,19 @@ typedef struct {
 	size_t block_size;
 } block_footer;
 
+typedef struct {
+	void *next_region;
+} region_header;
+
 /*** FUNCTION PROTOTYPES ***/
 
-void *initialize_memory();
-void *find_free_block(size_t size);
+void *get_free_block(size_t size);
+void *find_free_block_in_region(void *region_ptr, size_t size);
 
 void allocate_block(void *block_ptr, size_t size);
 void free_block(void *block_ptr);
 
+void *create_region(size_t size);
 void write_free_block(void *ptr, size_t size, bool previous_used,
 	bool last_block);
 void write_used_block(void *ptr, size_t size, bool previous_used,
@@ -45,25 +50,19 @@ bool is_last_block(void *block_ptr);
 void *get_previous_block(void *block_ptr);
 void *get_next_block(void *block_ptr);
 
+void *get_first_block(void *region_ptr);
+void *get_next_region(void *region_ptr);
+void *set_next_region(void *region_ptr, void *next_region_ptr);
+
 /*** GLOBAL VARIABLES ***/
 
-static void *start_ptr = NULL;
+static void *first_region_ptr = NULL;
 
 /*** LIBRARY FUNCTIONS ***/
 
 void *myalloc(int size) {
-	if (start_ptr == NULL) {
-		// printf("initialising memory...\n");
-		start_ptr = initialize_memory();
-		// printf("initialised memory\n");
-
-		if (start_ptr == NULL) {
-			return NULL;
-		}
-	}
-
 	// printf("looking for a free block for %d bytes...\n", size);
-	void* free_block_ptr = find_free_block(size);
+	void* free_block_ptr = get_free_block(size);
 	// printf("found a free block: %p\n", free_block_ptr);
 
 	if (free_block_ptr == NULL) {
@@ -81,31 +80,50 @@ void myfree(void *ptr){
 	free_block(ptr);
 }
 
-/*** INITIALISATION FUNCTIONS ***/
+/*** SEARCH FUNCTIONS ***/
 
-void *initialize_memory() {
-	void* ptr = mmap(0, INITIAL_SIZE, PROT_READ|PROT_WRITE,
-		MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+void *get_free_block(size_t content_size) {
+	void *region_ptr = first_region_ptr;
+	void *last_region_ptr = NULL;
 
-	if (ptr == MAP_FAILED) {
+	while (region_ptr != NULL) {
+		last_region_ptr = region_ptr;
+
+		// printf("checking region %p\n", region_ptr);
+		void *block_ptr = find_free_block_in_region(region_ptr, content_size);
+
+		if (block_ptr != NULL) {
+			// printf(" - found free block %p\n", block_ptr);
+			return block_ptr;
+		} else {
+			region_ptr = get_next_region(region_ptr);
+		}
+	}
+
+	void *free_region = create_region(content_size);
+
+	if (free_region == NULL) {
 		return NULL;
 	}
 
-	write_free_block(ptr, INITIAL_SIZE, true, true);
+	if (first_region_ptr == NULL) {
+		first_region_ptr = free_region;
+	}
 
-	return ptr;
+	if (last_region_ptr != NULL) {
+		set_next_region(last_region_ptr, free_region);
+	}
+
+	// printf("created region %p\n", free_region);
+	return get_first_block(free_region);
 }
 
-/*** SEARCH FUNCTIONS ***/
-
-void *find_free_block(size_t size) {
-	void *block_ptr = start_ptr;
-
-	// printf("- end is %p\n", end_ptr);
+void *find_free_block_in_region(void *region_ptr, size_t content_size) {
+	void *block_ptr = get_first_block(region_ptr);
 
 	do {
 		// printf("- checking block %p size %d used %d\n", block_ptr, get_content_size(block_ptr), is_block_used(block_ptr));
-		if (!is_block_used(block_ptr) && get_content_size(block_ptr) >= size) {
+		if (!is_block_used(block_ptr) && get_content_size(block_ptr) >= content_size) {
 			return block_ptr;
 		} else {
 			block_ptr = get_next_block(block_ptr);
@@ -282,4 +300,43 @@ void *get_previous_block(void *block_ptr) {
 	} else {
 		return NULL;
 	}
+}
+
+/*** REGION HELPER FUNCTIONS ***/
+
+void *create_region(size_t content_size) {
+	if (content_size < INITIAL_SIZE) {
+		content_size = INITIAL_SIZE;
+	}
+
+	size_t block_size = content_size + sizeof(block_header);
+	size_t region_size = block_size + sizeof(block_header);
+
+	void *region_ptr = mmap(0, region_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+
+	if (region_ptr == MAP_FAILED) {
+		return NULL;
+	}
+
+	region_header *header_ptr = region_ptr;
+	header_ptr->next_region = NULL;
+
+	void *block_ptr = get_first_block(region_ptr);
+	write_free_block(block_ptr, block_size, true, true);
+
+	return region_ptr;
+}
+
+void *get_first_block(void *region_ptr) {
+	return region_ptr + sizeof(region_header);
+}
+
+void *get_next_region(void *region_ptr) {
+	region_header *header_ptr = region_ptr;
+	return header_ptr->next_region;
+}
+
+void *set_next_region(void *region_ptr, void *next_region_ptr) {
+	region_header *header_ptr = region_ptr;
+	header_ptr->next_region = next_region_ptr;
 }
