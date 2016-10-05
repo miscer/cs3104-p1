@@ -34,13 +34,11 @@ void *find_free_block_in_region(void *region_ptr, size_t size);
 void allocate_block(void *block_ptr, size_t size);
 void free_block(void *block_ptr);
 
-void *create_region(size_t size);
 void write_free_block(void *ptr, size_t size, bool previous_used,
 	bool last_block);
 void write_used_block(void *ptr, size_t size, bool previous_used,
 	bool last_block);
 void set_previous_used(void *block_ptr, bool value);
-void update_region_used_blocks_num(void *region_ptr, int delta);
 
 void *get_content_pointer(void *block_ptr);
 void *get_block_pointer(void *content_ptr);
@@ -53,11 +51,15 @@ bool is_last_block(void *block_ptr);
 void *get_previous_block(void *block_ptr);
 void *get_next_block(void *block_ptr);
 
+void *create_region(size_t size);
+void destroy_region(void *region_ptr);
 void *get_first_block(void *region_ptr);
 void *get_next_region(void *region_ptr);
 void set_next_region(void *region_ptr, void *next_region_ptr);
 bool is_block_in_region(void *block_ptr, void *region_ptr);
 void *get_block_region(void *block_ptr);
+bool is_region_empty(void *region_ptr);
+void update_region_used_blocks_num(void *region_ptr, int delta);
 
 /*** GLOBAL VARIABLES ***/
 
@@ -223,6 +225,10 @@ void free_block(void *content_ptr) {
 	void *region_ptr = get_block_region(block_ptr);
 	update_region_used_blocks_num(region_ptr, -1);
 
+	if (is_region_empty(region_ptr)) {
+		destroy_region(region_ptr);
+	}
+
 	// printf("freed block %p\n", block_ptr);
 }
 
@@ -337,7 +343,31 @@ void *create_region(size_t content_size) {
 	void *block_ptr = get_first_block(region_ptr);
 	write_free_block(block_ptr, block_size, true, true);
 
+	// printf("Created new region at %p\n", region_ptr);
+
 	return region_ptr;
+}
+
+void destroy_region(void *region_ptr) {
+	region_header *header_ptr = region_ptr;
+
+	if (region_ptr == first_region_ptr) {
+		first_region_ptr = header_ptr->next_region;
+	} else {
+		region_header *previous_header_ptr = first_region_ptr;
+
+		while (previous_header_ptr->next_region != region_ptr) {
+			previous_header_ptr = previous_header_ptr->next_region;
+		}
+
+		assert(previous_header_ptr != NULL);
+
+		previous_header_ptr->next_region = header_ptr->next_region;
+	}
+
+	munmap(region_ptr, header_ptr->region_size);
+
+	// printf("Destroyed region at %p\n", region_ptr);
 }
 
 void *get_block_region(void *block_ptr) {
@@ -373,6 +403,11 @@ bool is_block_in_region(void *block_ptr, void *region_ptr) {
 	void *region_end = region_start + header_ptr->region_size;
 
 	return block_ptr > region_start && block_ptr < region_end;
+}
+
+bool is_region_empty(void *region_ptr) {
+	region_header *header_ptr = region_ptr;
+	return header_ptr->used_blocks_num == 0;
 }
 
 void update_region_used_blocks_num(void *region_ptr, int delta) {
