@@ -5,7 +5,7 @@
 #include <sys/mman.h>
 #include "myalloc.h"
 
-#define INITIAL_SIZE (1 << 30)
+#define MIN_REGION_SIZE (1 << 30)
 
 /*** DATA STRUCTURES ***/
 
@@ -22,6 +22,8 @@ typedef struct {
 
 typedef struct {
 	void *next_region;
+	size_t region_size;
+	int used_blocks_num;
 } region_header;
 
 /*** FUNCTION PROTOTYPES ***/
@@ -38,6 +40,7 @@ void write_free_block(void *ptr, size_t size, bool previous_used,
 void write_used_block(void *ptr, size_t size, bool previous_used,
 	bool last_block);
 void set_previous_used(void *block_ptr, bool value);
+void update_region_used_blocks_num(void *region_ptr, int delta);
 
 void *get_content_pointer(void *block_ptr);
 void *get_block_pointer(void *content_ptr);
@@ -52,7 +55,9 @@ void *get_next_block(void *block_ptr);
 
 void *get_first_block(void *region_ptr);
 void *get_next_region(void *region_ptr);
-void *set_next_region(void *region_ptr, void *next_region_ptr);
+void set_next_region(void *region_ptr, void *next_region_ptr);
+bool is_block_in_region(void *block_ptr, void *region_ptr);
+void *get_block_region(void *block_ptr);
 
 /*** GLOBAL VARIABLES ***/
 
@@ -172,6 +177,9 @@ void allocate_block(void *block_ptr, size_t used_content_size) {
 			set_previous_used(next_block, true);
 		}
 	}
+
+	void *region_ptr = get_block_region(block_ptr);
+	update_region_used_blocks_num(region_ptr, 1);
 }
 
 /*** FREEING FUNCTIONS ***/
@@ -211,6 +219,9 @@ void free_block(void *content_ptr) {
 	if (next_block != NULL) {
 		set_previous_used(next_block, false);
 	}
+
+	void *region_ptr = get_block_region(block_ptr);
+	update_region_used_blocks_num(region_ptr, -1);
 
 	// printf("freed block %p\n", block_ptr);
 }
@@ -305,12 +316,12 @@ void *get_previous_block(void *block_ptr) {
 /*** REGION HELPER FUNCTIONS ***/
 
 void *create_region(size_t content_size) {
-	if (content_size < INITIAL_SIZE) {
-		content_size = INITIAL_SIZE;
+	if (content_size < MIN_REGION_SIZE) {
+		content_size = MIN_REGION_SIZE;
 	}
 
 	size_t block_size = content_size + sizeof(block_header);
-	size_t region_size = block_size + sizeof(block_header);
+	size_t region_size = block_size + sizeof(region_header);
 
 	void *region_ptr = mmap(0, region_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
 
@@ -320,11 +331,25 @@ void *create_region(size_t content_size) {
 
 	region_header *header_ptr = region_ptr;
 	header_ptr->next_region = NULL;
+	header_ptr->region_size = region_size;
+	header_ptr->used_blocks_num = 0;
 
 	void *block_ptr = get_first_block(region_ptr);
 	write_free_block(block_ptr, block_size, true, true);
 
 	return region_ptr;
+}
+
+void *get_block_region(void *block_ptr) {
+	void *region_ptr = first_region_ptr;
+
+	while (region_ptr != NULL) {
+		if (is_block_in_region(block_ptr, region_ptr)) {
+			return region_ptr;
+		}
+	}
+
+	return NULL;
 }
 
 void *get_first_block(void *region_ptr) {
@@ -336,7 +361,23 @@ void *get_next_region(void *region_ptr) {
 	return header_ptr->next_region;
 }
 
-void *set_next_region(void *region_ptr, void *next_region_ptr) {
+void set_next_region(void *region_ptr, void *next_region_ptr) {
 	region_header *header_ptr = region_ptr;
 	header_ptr->next_region = next_region_ptr;
+}
+
+bool is_block_in_region(void *block_ptr, void *region_ptr) {
+	region_header *header_ptr = region_ptr;
+
+	void *region_start = region_ptr;
+	void *region_end = region_start + header_ptr->region_size;
+
+	return block_ptr > region_start && block_ptr < region_end;
+}
+
+void update_region_used_blocks_num(void *region_ptr, int delta) {
+	region_header *header_ptr = region_ptr;
+	header_ptr->used_blocks_num += delta;
+
+	// printf("Updated used blocks num to %d\n", header_ptr->used_blocks_num);
 }
