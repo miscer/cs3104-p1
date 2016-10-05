@@ -30,6 +30,7 @@ typedef struct {
 
 void *get_free_block(size_t size);
 void *find_free_block_in_region(void *region_ptr, size_t size);
+bool is_better_block(void *block_ptr, void *best_block_ptr);
 
 void allocate_block(void *block_ptr, size_t size);
 void free_block(void *block_ptr);
@@ -92,54 +93,69 @@ void myfree(void *ptr){
 void *get_free_block(size_t content_size) {
 	void *region_ptr = first_region_ptr;
 	void *last_region_ptr = NULL;
+	void *best_block_ptr = NULL;
 
 	while (region_ptr != NULL) {
 		last_region_ptr = region_ptr;
 
 		// printf("checking region %p\n", region_ptr);
-		void *block_ptr = find_free_block_in_region(region_ptr, content_size);
+		void *found_block_ptr = find_free_block_in_region(region_ptr, content_size);
 
-		if (block_ptr != NULL) {
-			// printf(" - found free block %p\n", block_ptr);
-			return block_ptr;
-		} else {
-			region_ptr = get_next_region(region_ptr);
+		if (found_block_ptr != NULL &&
+				is_better_block(found_block_ptr, best_block_ptr)) {
+			best_block_ptr = found_block_ptr;
 		}
+
+		region_ptr = get_next_region(region_ptr);
 	}
 
-	void *free_region = create_region(content_size);
+	if (best_block_ptr != NULL) {
+		return best_block_ptr;
+	} else {
+		void *free_region = create_region(content_size);
 
-	if (free_region == NULL) {
-		return NULL;
+		if (free_region == NULL) {
+			return NULL;
+		}
+
+		if (first_region_ptr == NULL) {
+			first_region_ptr = free_region;
+		}
+
+		if (last_region_ptr != NULL) {
+			set_next_region(last_region_ptr, free_region);
+		}
+
+		// printf("created region %p\n", free_region);
+		return get_first_block(free_region);
 	}
-
-	if (first_region_ptr == NULL) {
-		first_region_ptr = free_region;
-	}
-
-	if (last_region_ptr != NULL) {
-		set_next_region(last_region_ptr, free_region);
-	}
-
-	// printf("created region %p\n", free_region);
-	return get_first_block(free_region);
 }
 
 void *find_free_block_in_region(void *region_ptr, size_t content_size) {
 	void *block_ptr = get_first_block(region_ptr);
+	void *best_block_ptr = NULL;
 
 	do {
 		// printf("- checking block %p size %d used %d\n", block_ptr, get_content_size(block_ptr), is_block_used(block_ptr));
-		if (!is_block_used(block_ptr) && get_content_size(block_ptr) >= content_size) {
-			return block_ptr;
-		} else {
-			block_ptr = get_next_block(block_ptr);
+		if (
+			!is_block_used(block_ptr) &&
+			get_content_size(block_ptr) >= content_size &&
+			is_better_block(block_ptr, best_block_ptr)
+		) {
+			best_block_ptr = block_ptr;
 		}
+
+		block_ptr = get_next_block(block_ptr);
 	} while (block_ptr != NULL);
 
 	// printf("- no free blocks found\n");
 
-	return NULL;
+	return best_block_ptr;
+}
+
+bool is_better_block(void *block_ptr, void *best_block_ptr) {
+	return best_block_ptr == NULL ||
+		get_block_size(block_ptr) < get_block_size(best_block_ptr);
 }
 
 /*** ALLOCATION FUNCTIONS ***/
