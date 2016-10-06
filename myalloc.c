@@ -7,14 +7,14 @@
 
 #define MIN_REGION_SIZE (1 << 30)
 
+#define BLOCK_HEADER_BLOCK_SIZE (~7)
+#define BLOCK_HEADER_BLOCK_USED (4)
+#define BLOCK_HEADER_PREVIOUS_USED (2)
+#define BLOCK_HEADER_LAST_BLOCK (1)
+
 /*** DATA STRUCTURES ***/
 
-typedef struct {
-	size_t block_size;
-	bool block_used;
-	bool previous_used;
-	bool last_block;
-} block_header;
+typedef size_t block_header;
 
 typedef struct {
 	size_t block_size;
@@ -39,6 +39,9 @@ void write_free_block(void *ptr, size_t size, bool previous_used,
 	bool last_block);
 void write_used_block(void *ptr, size_t size, bool previous_used,
 	bool last_block);
+void write_block_header(void *ptr, size_t size, bool block_used,
+	bool previous_used, bool last_block);
+void write_block_footer(void *ptr, size_t size);
 void set_previous_used(void *block_ptr, bool value);
 
 void *get_content_pointer(void *block_ptr);
@@ -61,6 +64,8 @@ bool is_block_in_region(void *block_ptr, void *region_ptr);
 void *get_block_region(void *block_ptr);
 bool is_region_empty(void *region_ptr);
 void update_region_used_blocks_num(void *region_ptr, int delta);
+
+size_t round_up_size(size_t size, size_t multiple);
 
 /*** GLOBAL VARIABLES ***/
 
@@ -253,28 +258,42 @@ void free_block(void *content_ptr) {
 
 void write_free_block(void *ptr, size_t size, bool previous_used,
 		bool last_block) {
-	block_header *header_ptr = ptr;
-	header_ptr->block_size = size;
-	header_ptr->block_used = false;
-	header_ptr->previous_used = previous_used;
-	header_ptr->last_block = last_block;
-
-	block_footer *footer_ptr = ptr + (size - sizeof(block_footer));
-	footer_ptr->block_size = size;
+	write_block_header(ptr, size, false, previous_used, last_block);
+	write_block_footer(ptr, size);
 }
 
 void write_used_block(void *ptr, size_t size, bool previous_used,
 		bool last_block) {
-	block_header *header_ptr = ptr;
-	header_ptr->block_size = size;
-	header_ptr->block_used = true;
-	header_ptr->previous_used = previous_used;
-	header_ptr->last_block = last_block;
+	write_block_header(ptr, size, true, previous_used, last_block);
 }
 
-void set_previous_used(void *block_ptr, bool value) {
-	block_header *header_ptr = block_ptr;
-	header_ptr->previous_used = value;
+void write_block_header(void *ptr, size_t size, bool block_used,
+		bool previous_used, bool last_block) {
+	block_header *header_ptr = ptr;
+
+	// write all but the last three bits of size
+	// the three unused bits are set to zero
+	(*header_ptr) = size & BLOCK_HEADER_BLOCK_SIZE;
+
+	if (block_used) {
+		// turn on the block_used flag
+		(*header_ptr) |= BLOCK_HEADER_BLOCK_USED;
+	}
+
+	if (previous_used) {
+		// turn on the previous_used flag
+		(*header_ptr) |= BLOCK_HEADER_PREVIOUS_USED;
+	}
+
+	if (last_block) {
+		// turn on the last_block flag
+		(*header_ptr) |= BLOCK_HEADER_LAST_BLOCK;
+	}
+}
+
+void write_block_footer(void *ptr, size_t size) {
+	block_footer *footer_ptr = ptr + (size - sizeof(block_footer));
+	footer_ptr->block_size = size;
 }
 
 void *get_content_pointer(void *block_ptr) {
@@ -287,17 +306,27 @@ void *get_block_pointer(void *content_ptr) {
 
 size_t get_block_size(void *block_ptr) {
 	block_header *header_ptr = block_ptr;
-	return header_ptr->block_size;
+	return (*header_ptr) & BLOCK_HEADER_BLOCK_SIZE;
 }
 
 bool is_block_used(void *block_ptr) {
 	block_header *header_ptr = block_ptr;
-	return header_ptr->block_used;
+	return (*header_ptr) & BLOCK_HEADER_BLOCK_USED;
 }
 
 bool is_previous_used(void *block_ptr) {
 	block_header *header_ptr = block_ptr;
-	return header_ptr->previous_used;
+	return (*header_ptr) & BLOCK_HEADER_PREVIOUS_USED;
+}
+
+void set_previous_used(void *block_ptr, bool value) {
+	block_header *header_ptr = block_ptr;
+
+	if (value) {
+		(*header_ptr) |= BLOCK_HEADER_PREVIOUS_USED;
+	} else {
+		(*header_ptr) &= ~BLOCK_HEADER_PREVIOUS_USED;
+	}
 }
 
 bool is_next_used(void *block_ptr) {
@@ -312,7 +341,7 @@ bool is_next_used(void *block_ptr) {
 
 bool is_last_block(void *block_ptr) {
 	block_header *header_ptr = block_ptr;
-	return header_ptr->last_block;
+	return (*header_ptr) & BLOCK_HEADER_LAST_BLOCK;
 }
 
 void *get_next_block(void *block_ptr) {
@@ -333,7 +362,7 @@ void *get_previous_block(void *block_ptr) {
 }
 
 size_t get_block_size_from_content_size(size_t content_size) {
-	return content_size + sizeof(block_header);
+	return round_up_size(content_size + sizeof(block_header), ~BLOCK_HEADER_BLOCK_SIZE);
 }
 
 /*** REGION HELPER FUNCTIONS ***/
@@ -431,4 +460,16 @@ void update_region_used_blocks_num(void *region_ptr, int delta) {
 	header_ptr->used_blocks_num += delta;
 
 	// printf("Updated used blocks num to %d\n", header_ptr->used_blocks_num);
+}
+
+/*** GENERAL HELPER FUNCTIONS ***/
+
+size_t round_up_size(size_t size, size_t multiple) {
+	size_t remainder = size & multiple;
+
+	if (remainder == 0) {
+		return size;
+	} else {
+		return size + multiple - remainder;
+	}
 }
