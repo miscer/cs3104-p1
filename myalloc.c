@@ -43,8 +43,8 @@ void set_previous_used(void *block_ptr, bool value);
 
 void *get_content_pointer(void *block_ptr);
 void *get_block_pointer(void *content_ptr);
-size_t get_content_size(void *block_ptr);
 size_t get_block_size(void *block_ptr);
+size_t get_block_size_from_content_size(size_t content_size);
 bool is_block_used(void *block_ptr);
 bool is_previous_used(void* block_ptr);
 bool is_next_used(void *block_ptr);
@@ -91,6 +91,8 @@ void myfree(void *ptr){
 /*** SEARCH FUNCTIONS ***/
 
 void *get_free_block(size_t content_size) {
+	size_t block_size = get_block_size_from_content_size(content_size);
+
 	void *region_ptr = first_region_ptr;
 	void *last_region_ptr = NULL;
 	void *best_block_ptr = NULL;
@@ -99,7 +101,7 @@ void *get_free_block(size_t content_size) {
 		last_region_ptr = region_ptr;
 
 		// printf("checking region %p\n", region_ptr);
-		void *found_block_ptr = find_free_block_in_region(region_ptr, content_size);
+		void *found_block_ptr = find_free_block_in_region(region_ptr, block_size);
 
 		if (found_block_ptr != NULL &&
 				is_better_block(found_block_ptr, best_block_ptr)) {
@@ -112,7 +114,7 @@ void *get_free_block(size_t content_size) {
 	if (best_block_ptr != NULL) {
 		return best_block_ptr;
 	} else {
-		void *free_region = create_region(content_size);
+		void *free_region = create_region(block_size);
 
 		if (free_region == NULL) {
 			return NULL;
@@ -131,7 +133,7 @@ void *get_free_block(size_t content_size) {
 	}
 }
 
-void *find_free_block_in_region(void *region_ptr, size_t content_size) {
+void *find_free_block_in_region(void *region_ptr, size_t block_size) {
 	void *block_ptr = get_first_block(region_ptr);
 	void *best_block_ptr = NULL;
 
@@ -139,7 +141,7 @@ void *find_free_block_in_region(void *region_ptr, size_t content_size) {
 		// printf("- checking block %p size %d used %d\n", block_ptr, get_content_size(block_ptr), is_block_used(block_ptr));
 		if (
 			!is_block_used(block_ptr) &&
-			get_content_size(block_ptr) >= content_size &&
+			get_block_size(block_ptr) >= block_size &&
 			is_better_block(block_ptr, best_block_ptr)
 		) {
 			best_block_ptr = block_ptr;
@@ -161,17 +163,16 @@ bool is_better_block(void *block_ptr, void *best_block_ptr) {
 /*** ALLOCATION FUNCTIONS ***/
 
 void allocate_block(void *block_ptr, size_t used_content_size) {
+	size_t used_block_size = get_block_size_from_content_size(used_content_size);
+
 	assert(!is_block_used(block_ptr));
-	assert(get_content_size(block_ptr) >= used_content_size);
+	assert(get_block_size(block_ptr) >= used_block_size);
 
 	size_t original_block_size = get_block_size(block_ptr);
-	size_t original_content_size = get_content_size(block_ptr);
 	bool original_last_block = is_last_block(block_ptr);
 	bool original_previous_used = is_previous_used(block_ptr);
 
-	size_t used_block_size = used_content_size + sizeof(block_header);
-
-	if (original_content_size > used_content_size) {
+	if (original_block_size > used_block_size) {
 		// if the used block is bigger than needed, split it into a used
 		// and a free block
 
@@ -289,10 +290,6 @@ size_t get_block_size(void *block_ptr) {
 	return header_ptr->block_size;
 }
 
-size_t get_content_size(void *block_ptr) {
-	return get_block_size(block_ptr) - sizeof(block_header);
-}
-
 bool is_block_used(void *block_ptr) {
 	block_header *header_ptr = block_ptr;
 	return header_ptr->block_used;
@@ -335,14 +332,17 @@ void *get_previous_block(void *block_ptr) {
 	}
 }
 
+size_t get_block_size_from_content_size(size_t content_size) {
+	return content_size + sizeof(block_header);
+}
+
 /*** REGION HELPER FUNCTIONS ***/
 
-void *create_region(size_t content_size) {
-	if (content_size < MIN_REGION_SIZE) {
-		content_size = MIN_REGION_SIZE;
+void *create_region(size_t block_size) {
+	if (block_size < MIN_REGION_SIZE) {
+		block_size = MIN_REGION_SIZE;
 	}
 
-	size_t block_size = content_size + sizeof(block_header);
 	size_t region_size = block_size + sizeof(region_header);
 
 	void *region_ptr = mmap(0, region_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
