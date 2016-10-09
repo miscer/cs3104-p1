@@ -108,9 +108,13 @@ void *get_free_block(size_t content_size) {
 		// printf("checking region %p\n", region_ptr);
 		void *found_block_ptr = find_free_block_in_region(region_ptr, block_size);
 
-		if (found_block_ptr != NULL &&
-				is_better_block(found_block_ptr, best_block_ptr)) {
-			best_block_ptr = found_block_ptr;
+		if (found_block_ptr != NULL) {
+			if (get_block_size(found_block_ptr) == block_size) {
+				// perfect block found, no need to go further
+				return found_block_ptr;
+			} else if (is_better_block(found_block_ptr, best_block_ptr)) {
+				best_block_ptr = found_block_ptr;
+			}
 		}
 
 		region_ptr = get_next_region(region_ptr);
@@ -144,12 +148,16 @@ void *find_free_block_in_region(void *region_ptr, size_t block_size) {
 
 	do {
 		// printf("- checking block %p size %d used %d\n", block_ptr, get_content_size(block_ptr), is_block_used(block_ptr));
-		if (
-			!is_block_used(block_ptr) &&
-			get_block_size(block_ptr) >= block_size &&
-			is_better_block(block_ptr, best_block_ptr)
-		) {
-			best_block_ptr = block_ptr;
+		if (!is_block_used(block_ptr)) {
+			if (get_block_size(block_ptr) == block_size) {
+				// perfect block found, no need to go further
+				return block_ptr;
+			} else if (
+				get_block_size(block_ptr) > block_size &&
+				is_better_block(block_ptr, best_block_ptr)
+			) {
+				best_block_ptr = block_ptr;
+			}
 		}
 
 		block_ptr = get_next_block(block_ptr);
