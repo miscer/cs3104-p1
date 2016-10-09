@@ -65,7 +65,7 @@ This file contains the two required functions - \lstinline{myalloc} and \lstinli
 
 The library uses one global variable for storing the address of the first used region. From this address we can then find all other regions and their blocks.
 
-New regions of the memory are allocated using the \lstinline{mmap} function.
+New regions of the memory are allocated using the \lstinline{mmap} function. The size of the region is always rounded up to the system page size, retrieved with the \lstinline{getpagesize} function.
 
 Functions dealing with block headers and footers hide the exact details for the structure. This way I was able to do one optimisation with minial modifications to other functions.
 

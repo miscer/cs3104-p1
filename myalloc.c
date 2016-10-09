@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <sys/mman.h>
+#include <unistd.h>
 #include "myalloc.h"
 
 #define MIN_REGION_SIZE (1 << 30)
@@ -375,14 +376,18 @@ size_t get_block_size_from_content_size(size_t content_size) {
 
 /*** REGION HELPER FUNCTIONS ***/
 
-void *create_region(size_t block_size) {
-	if (block_size < MIN_REGION_SIZE) {
-		block_size = MIN_REGION_SIZE;
+void *create_region(size_t requested_block_size) {
+	if (requested_block_size < MIN_REGION_SIZE) {
+		requested_block_size = MIN_REGION_SIZE;
 	}
 
-	size_t region_size = block_size + sizeof(region_header);
+	size_t requested_region_size = requested_block_size + sizeof(region_header);
+	size_t region_size = round_up_size(requested_region_size, getpagesize());
 
-	void *region_ptr = mmap(0, region_size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
+	// printf("creating region size %zu\n", region_size);
+
+	void *region_ptr = mmap(0, region_size, PROT_READ|PROT_WRITE,
+		MAP_PRIVATE|MAP_ANONYMOUS, 0, 0);
 
 	if (region_ptr == MAP_FAILED) {
 		return NULL;
@@ -394,6 +399,7 @@ void *create_region(size_t block_size) {
 	header_ptr->used_blocks_num = 0;
 
 	void *block_ptr = get_first_block(region_ptr);
+	size_t block_size = region_size - sizeof(region_header);
 	write_free_block(block_ptr, block_size, true, true);
 
 	// printf("Created new region at %p\n", region_ptr);
