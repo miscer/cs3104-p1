@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage{listings}
 \usepackage{csquotes}
+\usepackage[margin=0.8in]{geometry}
 
 \title{CS3104 Practical 1 Report}
 \author{140015533}
@@ -80,6 +81,14 @@ The last three bits of the block size are used to store the three boolean fields
 The last three bits in the size are then set and read using bit operators.
 
 \section{Testing}
+
+I have used the provided test programs during development, as well as my programs designed to test a specific functionality.
+
+To check if the library correctly allocated and freed large blocks, I allocated a block with size that is bigger than the minimum region size. Then I wrote to the memory at the start and the end, to check that there is no segfault - this makes sure that the block is properly allocated. After that I freed the large block and tried to write to the memory again, expecting a segfault. If a segfault occurred, it meant that the virtual memory was properly released back to the operating system.
+
+After doing the block header optimisation I wanted to make sure that it works correctly and that using the last three bits of the block size for boolean values won't break the library. Knowing that the block size will be rounded up to a multiple of the size of \lstinline{size_t}, I allocated multiple blocks with the size of \lstinline{size_t} next to each other. I wrote a specific number in each one, to make sure that the whole block content is used. Then I went through the allocated blocks and checked that their value is correct.
+
+To check splitting coalescing, I have allocated one large block and then freed it. Then I allocated two smaller blocks and checked they use the same memory as the previous large block - this means that the large block was split. Afterwards I freed the two smaller blocks and allocated a large block again, making sure that it has the same address as the first large block - if it has, the two smaller blocks were coalesced into one bigger block.
 
 \section{Conclusion}
 
