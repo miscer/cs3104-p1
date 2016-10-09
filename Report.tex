@@ -1,10 +1,12 @@
-\documentclass[twocolumn]{article}
+\documentclass{article}
 \usepackage{listings}
 \usepackage{csquotes}
 
 \title{CS3104 Practical 1 Report}
 \author{140015533}
 \date{11 Oct 2016}
+
+\lstset{basicstyle=\ttfamily}
 
 \begin{document}
 
@@ -56,6 +58,26 @@ If no suitable block is found, a new region is created. This region will have a 
 The region header stores the number of used blocks inside of it. This number is updated after allocate or free action. If after a free action a region contains no used blocks, the memory is released back to the operating system. For this reason the size of the region is also stored in the header.
 
 \section{Implementation}
+
+The whole library is located in one file, as required by the practical specification.
+
+This file contains the two required functions - \lstinline{myalloc} and \lstinline{myfree}.
+
+The library uses one global variable for storing the address of the first used region. From this address we can then find all other regions and their blocks.
+
+New regions of the memory are allocated using the \lstinline{mmap} function.
+
+Functions dealing with block headers and footers hide the exact details for the structure. This way I was able to do one optimisation with minial modifications to other functions.
+
+\subsection{Optimisations}
+
+I have optimised the block header structure to be only the size of the \lstinline{size_t} type. This way the headers take less memory - for example, on a 64-bit system the difference is from 16 to 8 bytes for the header.
+
+Before the optimisation, the header structure contained one field with type \lstinline{size_t} and three \lstinline{bool} fields. After it there is only one \lstinline{size_t} field.
+
+The last three bits of the block size are used to store the three boolean fields. The size then has to be rounded up to the nearest multiple of 8 bytes. This means that a part of the 8 bytes we save on reducing the size of the header we might ``waste'' on the extra size. However, the extra size will be always less than 8 bytes, saving us at least one byte.
+
+The last three bits in the size are then set and read using bit operators.
 
 \section{Testing}
 
