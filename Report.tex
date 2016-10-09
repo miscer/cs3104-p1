@@ -94,6 +94,10 @@ To check splitting coalescing, I have allocated one large block and then freed i
 
 \section{Conclusion}
 
+I have implemented a basic memory allocator library that supports incremental virtual memory allocation, splitting and coalescing of memory blocks and uses some optimisations to reduce its memory footprint. It uses a free list to keep track of the block and the best-fit algorithm for finding a suitable free block of memory.
+
+This practical was an interesting exercise on memory management. It helped me understand how memory allocators work and what problems there are when implementing them. I learned why writing outside of allocated memory can cause not just segfaults, but corruption of the data structures used by the allocator. The practical has also broadened my experience with pointer arithmetic and memory addressing in C.
+
 \bibliographystyle{plain}
 \bibliography{Report}
 
