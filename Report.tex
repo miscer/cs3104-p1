@@ -1,0 +1,67 @@
+\documentclass[twocolumn]{article}
+\usepackage{listings}
+\usepackage{csquotes}
+
+\title{CS3104 Practical 1 Report}
+\author{140015533}
+\date{11 Oct 2016}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+In this practical our task was to implement the two basic C memory allocation functions - \lstinline{malloc} and \lstinline{free}.
+
+These functions are used to allocate memory on the heap. This is useful if we cannot allocate the memory for these objects at compile time.
+
+\section{Design}
+
+The library's strategy is to incrementally allocate one or more regions of virtual memory. These regions form a linked list: each region has a header that stores the address of the next region's header. The address of the first region is stored in a global variable.
+
+The regions are then split into free and used blocks as required. When a region is first allocated, it contains one large free block. This block is then split into smaller blocks when memory is allocated. After blocks are freed, they are coalesced with their free neighbours, if there are any.
+
+\subsection{Block header and footer}
+
+To be able to facilitate this, all blocks have a header structure associated to them. It contains the size of the block (including the header - this is to simplify the calculations when iterating the list of blocks) and three boolean values: is this block used, is the previous block used and is this the last block in the region. Free blocks also have a footer structure, located at the end of the block, containing just the size of the block.
+
+The block size value in the header is used when iterating the blocks in a region. If we know the location of one block header, we can calculate the location of the next block by adding the block size to the address of the block.
+The ``last block in the region'' value is also used, to be able to recognise the end of the list.
+
+Knowing whether the block is used is needed when looking for a free block, but also for coalescing.
+
+\subsection{Coalescing}
+
+During coalescing, a combination of various block header and footer values is used. When a block is freed, it is possible that there is another free block after or before it, but also that there is no block at all before or after it.
+
+To find out if there is a block before it and if it is free, the ``is previous block used'' value is used. It is set to true if the previous block is used, or if there is no block (this is the first block in the region.) If the previous block is free, its footer is used to determine the location of the header by subtracting the block size from the address of the freed block.
+
+Whether there is any next block can be found out using the ``is last block in the region'' value. Whether it is free is determined by looking at the value of ``is block used'' in the header of the next block.
+
+\subsection{Searching and splitting}
+
+When looking for a suitable free block, the regions and blocks are linearly searched. The best-fit algorithm is used, meaning that all blocks in the memory have to be searched.
+
+As \cite{Wilson95dynamicstorage} mentions, \textquote{The classic linear-list implementations may not scale well to large heaps, in terms of time consts; as the number of free blocks grows, the time to search the list may become unacceptable.} This is even worse when the best-fit search is used, as potentially all blocks need to be searched, which will get very slow for a large number of blocks. However, I have used it instead of first-fit because it \textquote{generally exhibits quite good memory usage} \cite{Wilson95dynamicstorage}.
+
+For every used region the best-fitting block is found by iterating the blocks in the region and selecting the smallest block that is still large enough to fit the requested memory. The same criteria are then used to select the region with the best-fitting block.
+
+When the block is found and it is bigger then needed, it is split into a used and a free block.
+
+If no suitable block is found, a new region is created. This region will have a minimum size to avoid creating many small regions. If the requested memory size is bigger than the minimum size, a region with the suitable size is created. This is essentially a region that will be used solely for this one block - after the block is freed, the region will contain no used blocks and will be released back to the operating system.
+
+\subsection{Releasing virtual memory}
+
+The region header stores the number of used blocks inside of it. This number is updated after allocate or free action. If after a free action a region contains no used blocks, the memory is released back to the operating system. For this reason the size of the region is also stored in the header.
+
+\section{Implementation}
+
+\section{Testing}
+
+\section{Conclusion}
+
+\bibliographystyle{plain}
+\bibliography{Report}
+
+\end{document}
