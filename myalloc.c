@@ -437,6 +437,8 @@ void *get_block_region(void *block_ptr) {
 		if (is_block_in_region(block_ptr, region_ptr)) {
 			return region_ptr;
 		}
+
+		region_ptr = get_next_region(region_ptr);
 	}
 
 	return NULL;
