@@ -58,6 +58,8 @@ If no suitable block is found, a new region is created. This region will have a 
 
 The region header stores the number of used blocks inside of it. This number is updated after allocate or free action. If after a free action a region contains no used blocks, the memory is released back to the operating system. For this reason the size of the region is also stored in the header.
 
+When freeing a block, the parent region is found by going through all regions and checking whether the block is located in each one. I chose this over iterating backwards through the blocks until the first one in the region is found, as it is more likely that there will be more blocks than regions to go through.
+
 \section{Implementation}
 
 The whole library is located in one file, as required by the practical specification.
