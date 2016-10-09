@@ -8,6 +8,7 @@
 
 #define MIN_REGION_SIZE (1 << 30)
 
+#define BLOCK_SIZE_MULTIPLE (8)
 #define BLOCK_HEADER_BLOCK_SIZE (~7)
 #define BLOCK_HEADER_BLOCK_USED (4)
 #define BLOCK_HEADER_PREVIOUS_USED (2)
@@ -371,7 +372,7 @@ void *get_previous_block(void *block_ptr) {
 }
 
 size_t get_block_size_from_content_size(size_t content_size) {
-	return round_up_size(content_size + sizeof(block_header), ~BLOCK_HEADER_BLOCK_SIZE);
+	return round_up_size(content_size + sizeof(block_header), BLOCK_SIZE_MULTIPLE);
 }
 
 /*** REGION HELPER FUNCTIONS ***/
@@ -479,7 +480,7 @@ void update_region_used_blocks_num(void *region_ptr, int delta) {
 /*** GENERAL HELPER FUNCTIONS ***/
 
 size_t round_up_size(size_t size, size_t multiple) {
-	size_t remainder = size & multiple;
+	size_t remainder = size % multiple;
 
 	if (remainder == 0) {
 		return size;
