@@ -46,7 +46,7 @@ Whether there is any next block can be found out using the ``is last block in th
 
 When looking for a suitable free block, the regions and blocks are linearly searched. The best-fit algorithm is used, meaning that all blocks in the memory have to be searched.
 
-As \cite{Wilson95dynamicstorage} mentions, \textquote{The classic linear-list implementations may not scale well to large heaps, in terms of time consts; as the number of free blocks grows, the time to search the list may become unacceptable.} This is even worse when the best-fit search is used, as potentially all blocks need to be searched, which will get very slow for a large number of blocks. However, I have used it instead of first-fit because it \textquote{generally exhibits quite good memory usage} \cite{Wilson95dynamicstorage}.
+As \cite{Wilson95dynamicstorage} mentions, \textquote{The classic linear-list implementations may not scale well to large heaps, in terms of time costs; as the number of free blocks grows, the time to search the list may become unacceptable.} This is even worse when the best-fit search is used, as potentially all blocks need to be searched, which will get very slow for a large number of blocks. However, I have used it instead of first-fit because it \textquote{generally exhibits quite good memory usage} \cite{Wilson95dynamicstorage}.
 
 For every used region the best-fitting block is found by iterating the blocks in the region and selecting the smallest block that is still large enough to fit the requested memory. The same criteria are then used to select the region with the best-fitting block.
 
@@ -70,7 +70,7 @@ The library uses one global variable for storing the address of the first used r
 
 New regions of the memory are allocated using the \lstinline{mmap} function. The size of the region is always rounded up to the system page size, retrieved with the \lstinline{getpagesize} function.
 
-Functions dealing with block headers and footers hide the exact details for the structure. This way I was able to do one optimisation with minial modifications to other functions.
+Functions dealing with block headers and footers hide the exact details for the structure. This way I was able to do one optimisation with minimal modifications to other functions.
 
 \subsection{Optimisations}
 
