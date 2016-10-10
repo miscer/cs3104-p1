@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <assert.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "myalloc.h"
@@ -399,9 +398,6 @@ bool is_better_block(void *block_ptr, void *best_block_ptr) {
 void allocate_block(void *block_ptr, size_t used_content_size) {
 	size_t used_block_size = get_block_size_from_content_size(used_content_size);
 
-	assert(!is_block_used(block_ptr));
-	assert(get_block_size(block_ptr) >= used_block_size);
-
 	size_t original_block_size = get_block_size(block_ptr);
 	bool original_last_block = is_last_block(block_ptr);
 	bool original_previous_used = is_previous_used(block_ptr);
@@ -440,8 +436,6 @@ void allocate_block(void *block_ptr, size_t used_content_size) {
 
 void free_block(void *content_ptr) {
 	void *block_ptr = get_block_pointer(content_ptr);
-
-	assert(is_block_used(block_ptr));
 
 	bool previous_used = is_previous_used(block_ptr);
 	bool next_used = is_next_used(block_ptr);
@@ -647,8 +641,6 @@ void destroy_region(void *region_ptr) {
 		while (previous_header_ptr->next_region != region_ptr) {
 			previous_header_ptr = previous_header_ptr->next_region;
 		}
-
-		assert(previous_header_ptr != NULL);
 
 		// remove the region from the list
 		previous_header_ptr->next_region = header_ptr->next_region;
